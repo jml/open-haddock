@@ -1,3 +1,6 @@
+{-| Command-line tool to open local haddock documentation.
+-}
+
 module Main (main) where
 
 import BasicPrelude hiding (FilePath, empty)
@@ -19,13 +22,35 @@ import Turtle
 -- $ xdg-open $PATH/index.html
 
 
+-- TODO:
+-- * return non-zero exit code if package not found
+-- * actually open the documentation
+-- * allow modules to be specified
+--   * try to open actual module page
+-- * what if haddock-html field not present?
+-- * what if directory doesn't exist?
+-- * DWIM
+--   * look up the module first
+--   * look up the package doc for the module
+--   * look up the package
+
+data Config = Config
+  { userPackage :: Text
+  }
+
+
+commandLine :: Parser Config
+commandLine = Config <$> argText "PACKAGE" "Package to read documentation for"
+
 getHaddockPath :: Text -> Shell FilePath
 getHaddockPath package = do
   fromText <$> inproc "ghc-pkg" ["field", "--simple-output", package, "haddock-html"] empty
 
 
 main :: IO ()
-main = sh $ do
-  path <- getHaddockPath "turtle"
-  echo $ format fp path
+main = do
+  config <- options "Documentation" commandLine
+  sh $ do
+    path <- getHaddockPath (userPackage config)
+    echo $ format fp path
 
