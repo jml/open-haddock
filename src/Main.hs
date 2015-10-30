@@ -14,12 +14,15 @@ import Turtle
 
 
 data Config = Config
-  { userPackage :: Text
+  { openInBrowser :: Bool
+  , userPackage :: Text
   }
 
 
 commandLine :: Parser Config
-commandLine = Config <$> argText "PACKAGE" "Package to read documentation for"
+commandLine =
+  Config <$> (not <$> switch "dry-run" 'n' "Don't open browser, just print location")
+         <*> argText "MODULE" "Package or module that you want to read the documentation for"
 
 
 getHaddockPath :: Alternative m => Text -> Shell (m FilePath)
@@ -73,12 +76,17 @@ openFile path = proc openCommand [format fp path] empty
 
 main :: IO ()
 main = do
-  config <- options "Documentation" commandLine
+  config <- options "Open haddock documentation in the browser" commandLine
   let packageOrModule = userPackage config
   sh $ do
     path <- dwimPath packageOrModule
     case path of
-      Just path' -> openFile path'
+      Just path' ->
+        if openInBrowser config
+        then openFile path'
+        else do
+          echo (format fp path')
+          exit ExitSuccess
       Nothing -> do
         err $ "Could not find documentation for " <> packageOrModule
         exit (ExitFailure 1)
