@@ -1,4 +1,7 @@
 {-| Command-line tool to open local haddock documentation.
+
+$ open-haddock Data.Text
+$ open-haddock text
 -}
 
 module Main (main) where
@@ -9,15 +12,6 @@ import qualified Data.Text as Text
 import System.Info (os)
 import Turtle
 
-
--- TODO:
--- * return non-zero exit code if package not found
--- * what if haddock-html field not present?
--- * what if directory doesn't exist?
--- * DWIM
---   * look up the module first
---   * look up the package doc for the module
---   * look up the package
 
 data Config = Config
   { userPackage :: Text
@@ -31,10 +25,12 @@ commandLine = Config <$> argText "PACKAGE" "Package to read documentation for"
 getHaddockPath :: Alternative m => Text -> Shell (m FilePath)
 getHaddockPath package = do
   (code, result) <- procStrict "ghc-pkg" ["field", "--simple-output", package, "haddock-html"] empty
-  return $ case code of
-    ExitSuccess -> pure . fromText . Text.strip $ result
-    ExitFailure 1 -> A.empty
-    ExitFailure n -> terror $ "ghc-pkg failed unexpectedly: " ++ show n
+  case code of
+    ExitSuccess -> return . pure . fromText . Text.strip $ result
+    ExitFailure 1 -> return A.empty
+    ExitFailure n -> do
+      err $ "ghc-pkg failed unexpectedly: " <> show n
+      exit (ExitFailure n)
 
 
 getPackageName :: Alternative m => Text -> Shell (m Text)
@@ -43,6 +39,16 @@ getPackageName moduleName = do
   return $ case result of
     "" -> A.empty
     path -> pure . Text.strip $ path
+
+
+dwimPath :: Alternative m => Text -> Shell (m FilePath)
+dwimPath packageOrModule = do
+  packageName <- getPackageName packageOrModule
+  case packageName of
+    Just package ->
+      fmap (flip haddockModule packageOrModule) <$> getHaddockPath package
+    Nothing -> do
+      fmap haddockRoot <$> getHaddockPath packageOrModule
 
 
 haddockRoot :: FilePath -> FilePath
@@ -68,19 +74,11 @@ openFile path = proc openCommand [format fp path] empty
 main :: IO ()
 main = do
   config <- options "Documentation" commandLine
-  let moduleName = userPackage config
+  let packageOrModule = userPackage config
   sh $ do
-    package <- getPackageName moduleName
-    case package of
+    path <- dwimPath packageOrModule
+    case path of
+      Just path' -> openFile path'
       Nothing -> do
-        path <- getHaddockPath moduleName
-        case path of
-          Nothing -> terror "XXX: Real error handling: Could not find path or module"
-          Just path' -> do
-            echo $ format fp path'
-            openFile (haddockRoot path')
-      Just package' -> do
-        path <- getHaddockPath package'
-        case path of
-          Nothing -> terror "XXX: Real error handling: Could not find path or module"
-          Just path' -> openFile (haddockModule path' moduleName)
+        err $ "Could not find documentation for " <> packageOrModule
+        exit (ExitFailure 1)
