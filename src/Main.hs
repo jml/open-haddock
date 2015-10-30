@@ -3,7 +3,8 @@
 
 module Main (main) where
 
-import BasicPrelude hiding (FilePath, empty)
+import BasicPrelude hiding (FilePath, empty, (</>))
+import System.Info (os)
 import Turtle
 
 
@@ -24,7 +25,6 @@ import Turtle
 
 -- TODO:
 -- * return non-zero exit code if package not found
--- * actually open the documentation
 -- * allow modules to be specified
 --   * try to open actual module page
 -- * what if haddock-html field not present?
@@ -42,9 +42,25 @@ data Config = Config
 commandLine :: Parser Config
 commandLine = Config <$> argText "PACKAGE" "Package to read documentation for"
 
+
 getHaddockPath :: Text -> Shell FilePath
 getHaddockPath package = do
   fromText <$> inproc "ghc-pkg" ["field", "--simple-output", package, "haddock-html"] empty
+
+
+haddockRoot :: FilePath -> FilePath
+haddockRoot xs = xs </> "index.html"
+
+
+openCommand :: Text
+openCommand
+  | os == "darwin"  = "open"
+  | os == "mingw32" = "start"
+  | otherwise       = "xdg-open"
+
+
+openFile :: MonadIO m => FilePath -> m ExitCode
+openFile path = proc openCommand [format fp path] empty
 
 
 main :: IO ()
@@ -53,4 +69,4 @@ main = do
   sh $ do
     path <- getHaddockPath (userPackage config)
     echo $ format fp path
-
+    openFile (haddockRoot path)
