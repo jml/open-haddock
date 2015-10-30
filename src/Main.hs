@@ -4,6 +4,7 @@
 module Main (main) where
 
 import BasicPrelude hiding (FilePath, empty, (</>), (<.>))
+import qualified Control.Applicative as A
 import qualified Data.Text as Text
 import System.Info (os)
 import Turtle
@@ -27,14 +28,21 @@ commandLine :: Parser Config
 commandLine = Config <$> argText "PACKAGE" "Package to read documentation for"
 
 
-getHaddockPath :: Text -> Shell FilePath
+getHaddockPath :: Alternative m => Text -> Shell (m FilePath)
 getHaddockPath package = do
-  fromText <$> inproc "ghc-pkg" ["field", "--simple-output", package, "haddock-html"] empty
+  (code, result) <- procStrict "ghc-pkg" ["field", "--simple-output", package, "haddock-html"] empty
+  return $ case code of
+    ExitSuccess -> pure . fromText . Text.strip $ result
+    ExitFailure 1 -> A.empty
+    ExitFailure n -> terror $ "ghc-pkg failed unexpectedly: " ++ show n
 
 
-getPackageName :: Text -> Shell Text
-getPackageName moduleName =
-  inproc "ghc-pkg" ["find-module", "--simple-output", moduleName] empty
+getPackageName :: Alternative m => Text -> Shell (m Text)
+getPackageName moduleName = do
+  (_code, result) <- procStrict "ghc-pkg" ["find-module", "--simple-output", moduleName] empty
+  return $ case result of
+    "" -> A.empty
+    path -> pure . Text.strip $ path
 
 
 haddockRoot :: FilePath -> FilePath
@@ -63,6 +71,16 @@ main = do
   let moduleName = userPackage config
   sh $ do
     package <- getPackageName moduleName
-    path <- getHaddockPath package
-    echo $ format fp path
-    openFile (haddockModule path moduleName)
+    case package of
+      Nothing -> do
+        path <- getHaddockPath moduleName
+        case path of
+          Nothing -> terror "XXX: Real error handling: Could not find path or module"
+          Just path' -> do
+            echo $ format fp path'
+            openFile (haddockRoot path')
+      Just package' -> do
+        path <- getHaddockPath package'
+        case path of
+          Nothing -> terror "XXX: Real error handling: Could not find path or module"
+          Just path' -> openFile (haddockModule path' moduleName)
