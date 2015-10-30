@@ -1,6 +1,7 @@
 module Main (main) where
 
-import BasicPrelude
+import BasicPrelude hiding (FilePath, empty)
+import Turtle
 
 
 -- 1. Get documentation for package:
@@ -18,5 +19,13 @@ import BasicPrelude
 -- $ xdg-open $PATH/index.html
 
 
+getHaddockPath :: Text -> Shell FilePath
+getHaddockPath package = do
+  fromText <$> inproc "ghc-pkg" ["field", "--simple-output", package, "haddock-html"] empty
+
+
 main :: IO ()
-main = putStrLn "Hello world!"
+main = sh $ do
+  path <- getHaddockPath "turtle"
+  echo $ format fp path
+
