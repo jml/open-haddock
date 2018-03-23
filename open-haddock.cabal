@@ -20,7 +20,7 @@ cabal-version:       >=1.10
 
 executable open-haddock
   main-is:             Main.hs
-  build-depends:       base >=4.8 && <4.9
+  build-depends:       base >=4.8 && <4.12
                      , basic-prelude >= 0.5
                      , text >= 1.2
                      , turtle >= 1.2

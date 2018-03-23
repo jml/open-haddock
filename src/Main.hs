@@ -32,7 +32,7 @@ getHaddockPath package = do
     ExitSuccess -> return . pure . fromText . Text.strip $ result
     ExitFailure 1 -> return A.empty
     ExitFailure n -> do
-      err $ "ghc-pkg failed unexpectedly: " <> show n
+      mapM_ err $ textToLines $ "ghc-pkg failed unexpectedly: " <> Text.pack (show n)
       exit (ExitFailure n)
 
 
@@ -85,8 +85,8 @@ main = do
         if openInBrowser config
         then openFile path'
         else do
-          echo (format fp path')
+          mapM_ echo $ textToLines $ format fp path'
           exit ExitSuccess
       Nothing -> do
-        err $ "Could not find documentation for " <> packageOrModule
+        mapM_ err $ textToLines $ "Could not find documentation for " <> packageOrModule
         exit (ExitFailure 1)
